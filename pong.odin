@@ -15,6 +15,8 @@ Game_State::struct{
     ai_reaction_delay: f32, 
     ai_target_y: f32,
     ai_reaction_counter: f32,
+    player_score: f32,
+    cpu_score: f32,
     ball: rl.Rectangle,
     ball_direction: rl.Vector2,
     ball_speed: f32
@@ -62,6 +64,8 @@ main :: proc() {
         ai_reaction_delay = 0.1,
         ball = {width = 30, height = 30},
         ball_speed = 10,
+        cpu_score = 0,
+        player_score = 0,
     }
     reset(&game_state) 
     using game_state
@@ -81,27 +85,28 @@ main :: proc() {
         //AI paddle movement
         ai_reaction_counter += rl.GetFrameTime()
 
-        if ball_direction.x < 0 && ai_reaction_counter >= ai_reaction_delay{
+        if ai_reaction_counter >= ai_reaction_delay{
             ai_reaction_counter = 0
 
-            ai_target_y = ball.y + ball.height/2
-            diff_y := ai_target_y - ai_paddle.y/2
+            if ball_direction.x < 0{
+                diff_y := ball.y + ball.height/2 - ai_paddle.y + ai_paddle.height/2
 
-            target_direction:f32= 0
-            if diff_y > 0{
-                target_direction = 1
+                ai_target_y = diff_y + rand.float32_range(-10, 10)
             }
-            else if diff_y < 0{
-                target_direction = -1
+            else{
+                ai_target_y = window_size.y/2 - ai_paddle.y + ai_paddle.height/2
             }
-
-            ai_paddle.y += ai_paddle_speed * target_direction + rand.float32_range(-20, 20)
         }
-
+        ai_paddle.y += linalg.clamp(ai_target_y, -ai_paddle_speed, ai_paddle_speed) * 0.65
         ai_paddle.y = linalg.clamp(ai_paddle.y, 0, window_size.y - ai_paddle.height)
         
         next_ball:= rl.Rectangle{ball.x + ball_speed * ball_direction.x, ball.y, ball.width, ball.height}
-        if next_ball.x >= (window_size.x - ball.width) || next_ball.x <= 0{
+        if next_ball.x >= (window_size.x - ball.width) {
+            cpu_score += 1
+            reset(&game_state)
+        }
+        else if next_ball.x <= 0{
+            player_score += 1
             reset(&game_state)
         }
 
@@ -120,6 +125,9 @@ main :: proc() {
         rl.DrawRectangleRec(paddle, rl.WHITE)
         rl.DrawRectangleRec(ai_paddle, rl.WHITE)
         rl.DrawRectangleRec(ball, rl.RED)
+        rl.DrawText(fmt.ctprintf("{}", cpu_score), 12, 12, 32, rl.WHITE)
+        rl.DrawText(fmt.ctprintf("{}", player_score), i32(window_size.x) - 30, 12, 32, rl.WHITE)
         rl.EndDrawing()
+        free_all(context.temp_allocator)
     }
 }
