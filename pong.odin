@@ -12,6 +12,9 @@ Game_State::struct{
     paddle_speed: f32,
     ai_paddle: rl.Rectangle,
     ai_paddle_speed: f32,
+    ai_reaction_delay: f32, 
+    ai_target_y: f32,
+    ai_reaction_counter: f32,
     ball: rl.Rectangle,
     ball_direction: rl.Vector2,
     ball_speed: f32
@@ -35,6 +38,20 @@ reset :: proc(using gs: ^Game_State){
     ai_paddle.y = window_size.y/2 - paddle.height/2
 }
 
+calc_ball_direction :: proc(ball: rl.Rectangle, paddle: rl.Rectangle) -> (rl.Vector2, bool) {
+    if rl.CheckCollisionRecs(ball, paddle){
+        paddle_center:= rl.Vector2{paddle.x + paddle.width/2, paddle.y + paddle.height/2}
+        ball_center:= rl.Vector2{ball.x + ball.width/2, ball.y + ball.height/2}
+        ball_direction:= linalg.normalize0(ball_center - paddle_center)
+
+        return ball_direction, true
+    }
+    
+    return {}, false
+    // if next_ball.y <= 0 || next_ball.y >= window_size.y - ball.height{
+    //     ball_direction.y *= -1
+}
+
 main :: proc() {
     game_state:= Game_State{
         window_size = {1280, 720},
@@ -42,6 +59,7 @@ main :: proc() {
         paddle_speed = 10,
         ai_paddle = {width = 30, height = 80},
         ai_paddle_speed = 10,
+        ai_reaction_delay = 0.1,
         ball = {width = 30, height = 30},
         ball_speed = 10,
     }
@@ -59,27 +77,38 @@ main :: proc() {
             paddle.y += paddle_speed 
         }
         paddle.y = linalg.clamp(paddle.y, 0, window_size.y - paddle.height)
+         
+        //AI paddle movement
+        ai_reaction_counter += rl.GetFrameTime()
 
-        ai_paddle.y = ball.y
+        if ball_direction.x < 0 && ai_reaction_counter >= ai_reaction_delay{
+            ai_reaction_counter = 0
+
+            ai_target_y = ball.y + ball.height/2
+            diff_y := ai_target_y - ai_paddle.y/2
+
+            target_direction:f32= 0
+            if diff_y > 0{
+                target_direction = 1
+            }
+            else if diff_y < 0{
+                target_direction = -1
+            }
+
+            ai_paddle.y += ai_paddle_speed * target_direction + rand.float32_range(-20, 20)
+        }
 
         ai_paddle.y = linalg.clamp(ai_paddle.y, 0, window_size.y - ai_paddle.height)
-
         
         next_ball:= rl.Rectangle{ball.x + ball_speed * ball_direction.x, ball.y, ball.width, ball.height}
         if next_ball.x >= (window_size.x - ball.width) || next_ball.x <= 0{
             reset(&game_state)
         }
-        else if rl.CheckCollisionRecs(next_ball, paddle){
-            paddle_center:= rl.Vector2{paddle.x + paddle.width/2, paddle.y + paddle.height/2}
-            ball_center:= rl.Vector2{ball.x + ball.width/2, ball.y + ball.height/2}
-            ball_direction = linalg.normalize0(ball_center - paddle_center)
-        }
-        else if rl.CheckCollisionRecs(next_ball, ai_paddle){
-            ai_paddle_center:= rl.Vector2{ai_paddle.x + ai_paddle.width/2, ai_paddle.y + ai_paddle.height/2}
-            ball_center:= rl.Vector2{ball.x + ball.width/2, ball.y + ball.height/2}
-            ball_direction = linalg.normalize0(ball_center - ai_paddle_center)
-        }
-        else if next_ball.y <= 0 || next_ball.y >= window_size.y - ball.height{
+
+        ball_direction = calc_ball_direction(next_ball, paddle) or_else ball_direction
+        ball_direction = calc_ball_direction(next_ball, ai_paddle) or_else ball_direction
+
+        if next_ball.y <= 0 || next_ball.y >= window_size.y - ball.height{
             ball_direction.y *= -1
         }
 
